@@ -1,93 +1,105 @@
+import java.util.Objects;
+
 /**
- * Represents a single song with metadata and file path.
- * Fields: title, artist, duration (in seconds), and absolute file path.
+ * Represents a single song with its metadata and the path to its audio file.
+ *
+ * <p>Two {@code Song} objects are considered equal if they share the same
+ * title and artist (case-sensitive). Duration and file path are intentionally
+ * excluded from equality so that the same logical song can be located
+ * regardless of where it is stored on disk.</p>
+ *
+ * @author Plinio Durango
+ * @version 2.0
  */
 public class Song {
+
     private String title;
     private String artist;
-    private int duration;              // duration in seconds
-    private String absoluteFilePath;   // absolute path to the audio file
+    /** Duration in seconds. */
+    private int    duration;
+    /** Absolute path to the audio file (WAV or AIFF). */
+    private String absoluteFilePath;
 
     /**
-     * Constructor to create a Song object with all details.
+     * Constructs a Song with all fields populated.
+     *
+     * @param title            the song title
+     * @param artist           the performing artist
+     * @param duration         duration in seconds
+     * @param absoluteFilePath absolute path to the audio file
      */
     public Song(String title, String artist, int duration, String absoluteFilePath) {
-        this.title = title;
-        this.artist = artist;
-        this.duration = duration;
+        this.title            = title;
+        this.artist           = artist;
+        this.duration         = duration;
         this.absoluteFilePath = absoluteFilePath;
     }
 
-    // ----------------------- Setters -----------------------
+    // ----------------------------------------------------------------
+    // Setters
+    // ----------------------------------------------------------------
 
-    /** Set song title */
-    public void setTitle(String title){
-        this.title = title;
-    }
+    /** @param title the new song title */
+    public void setTitle(String title)                       { this.title = title; }
 
-    /** Set song artist */
-    public void setArtist(String artist){
-        this.artist = artist;
-    }
+    /** @param artist the new artist name */
+    public void setArtist(String artist)                     { this.artist = artist; }
 
-    /** Set song duration in seconds */
-    public void setDuration(int duration){
-        this.duration = duration;
-    }
+    /** @param duration the new duration in seconds */
+    public void setDuration(int duration)                    { this.duration = duration; }
 
-    /** Set absolute file path for the audio file */
-    public void setAbsoluteFilePath(String absoluteFilePath){
-        this.absoluteFilePath = absoluteFilePath;
-    }
+    /** @param absoluteFilePath the new absolute file path */
+    public void setAbsoluteFilePath(String absoluteFilePath) { this.absoluteFilePath = absoluteFilePath; }
 
-    // ----------------------- Getters -----------------------
+    // ----------------------------------------------------------------
+    // Getters
+    // ----------------------------------------------------------------
 
-    /** Get song title */
-    public String getTitle(){
-        return this.title;
-    }
+    /** @return the song title */
+    public String getTitle()            { return title; }
 
-    /** Get song artist */
-    public String getArtist(){
-        return this.artist;
-    }
+    /** @return the artist name */
+    public String getArtist()           { return artist; }
 
-    /** Get song duration (in seconds) */
-    public int getDuration(){
-        return this.duration;
-    }
+    /** @return the duration in seconds */
+    public int getDuration()            { return duration; }
 
-    /** Get absolute file path */
-    public String getAbsoluteFilePath(){
-        return this.absoluteFilePath;
-    }
+    /** @return the absolute path to the audio file */
+    public String getAbsoluteFilePath() { return absoluteFilePath; }
 
-    // ----------------------- Overrides -----------------------
+    // ----------------------------------------------------------------
+    // Object overrides
+    // ----------------------------------------------------------------
 
     /**
-     * Two songs are considered equal if they have the same title and artist.
-     * (Duration and file path are ignored for equality check.)
+     * Two songs are equal if they share the same title and artist.
+     * Duration and file path are excluded from the comparison.
      */
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof Song)) {
-            return false;
-        }
-        Song s = (Song) obj;
-        return this.getTitle().equals(s.getTitle()) &&
-               this.getArtist().equals(s.getArtist());
+        if (this == obj)                  return true;
+        if (!(obj instanceof Song other)) return false;
+        return Objects.equals(title, other.title)
+            && Objects.equals(artist, other.artist);
     }
 
     /**
-     * Return a human-readable string with all song details.
+     * Hash code consistent with {@link #equals}: based on title and artist only.
+     */
+    @Override
+    public int hashCode() {
+        return Objects.hash(title, artist);
+    }
+
+    /**
+     * Returns a human-readable multi-line string with all song details.
+     *
+     * @return formatted song information
      */
     @Override
     public String toString() {
-        StringBuilder s = new StringBuilder();
-        s.append("\nTitle: ").append(getTitle());
-        s.append("\nArtist: ").append(getArtist());
-        s.append("\nDuration: ").append(getDuration()).append(" seconds");
-        s.append("\nFile Path: ").append(getAbsoluteFilePath());
-        return s.toString();
+        return String.format(
+            "Title: %s%nArtist: %s%nDuration: %d s%nFile: %s",
+            title, artist, duration, absoluteFilePath);
     }
 }
