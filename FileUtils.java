@@ -1,185 +1,219 @@
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Scanner;
-import java.io.File;
 
 /**
- * Utility helpers for reading/writing playlists to CSV and for
- * validating referenced audio files on disk.
+ * Utility helpers for reading and writing playlists to CSV, and for
+ * validating that referenced audio files exist on disk.
  *
- * CSV format expected (with header row):
- *   Title,Artist,Duration,FilePath
+ * <p>Expected CSV format (comma-delimited, with a header row):</p>
+ * <pre>
+ * Title,Artist,Duration,FilePath
+ * Clair de Lune,Debussy,5:24,/music/clair_de_lune.wav
+ * </pre>
  *
- * Duration is parsed as mm:ss by parseDurationToSeconds(..).
+ * <p>Duration may be in {@code mm:ss} format or as plain seconds.
+ * Lines with fewer than 4 columns, empty required fields, or an
+ * unparseable duration are skipped with a descriptive warning.</p>
+ *
+ * @author Plinio Durango
+ * @version 2.0
  */
 public class FileUtils {
 
+    // ----------------------------------------------------------------
+    // Save
+    // ----------------------------------------------------------------
+
     /**
-     * Save all songs from a linked list to a CSV file (overwrites if exists).
-     * Writes a header and then one row per song.
+     * Saves all songs from a linked list to a CSV file, overwriting any
+     * existing file. Writes a header row followed by one row per song.
+     * Duration is written in {@code mm:ss} format.
+     *
+     * @param filename the output file name
+     * @param dlList   the list of songs to save
      */
     public static void savePlaylistToCSV(String filename, DoublyLinkedSongList dlList) {
         try (PrintWriter out = new PrintWriter(new FileOutputStream(filename))) {
-            // CSV header
             out.println("Title,Artist,Duration,FilePath");
 
-            // Walk the list and write each song
-            DoublyLinkedSongNode current = dlList.getHeadNode();
-            while (current != null) {
-                Song s = current.getSong();
-
-                // One CSV line: title, artist, duration(seconds), path
-                out.printf("%s,%s,%d,%s%n",
-                           s.getTitle(),
-                           s.getArtist(),
-                           s.getDuration(),
-                           s.getAbsoluteFilePath());
-
-                current = current.getNext(); // advance
+            DoublyLinkedSongNode cur = dlList.getHeadNode();
+            while (cur != null) {
+                Song s = cur.getSong();
+                int   m = s.getDuration() / 60;
+                int   sec = s.getDuration() % 60;
+                out.printf("%s,%s,%d:%02d,%s%n",
+                    s.getTitle(), s.getArtist(), m, sec, s.getAbsoluteFilePath());
+                cur = cur.getNext();
             }
 
-            System.out.println("Playlist data written to " + filename);
+            System.out.println("Playlist saved to " + filename);
         } catch (IOException e) {
-            System.out.println("Error writing Playlist data: " + e.getMessage());
+            System.err.println("Error saving playlist: " + e.getMessage());
         }
     }
 
+    // ----------------------------------------------------------------
+    // Load
+    // ----------------------------------------------------------------
+
     /**
-     * Load a playlist from a CSV file into a new DoublyLinkedSongList.
-     * Skips the header line, reports malformed rows with line numbers,
-     * and continues parsing the rest.
+     * Loads a playlist from a single CSV file into a new
+     * {@link DoublyLinkedSongList}.
+     *
+     * <p>The first line is treated as a header and skipped. Malformed
+     * rows are logged to {@code stderr} and skipped; parsing continues
+     * with the remaining rows.</p>
+     *
+     * @param fileName path to the CSV file
+     * @return a new {@link DoublyLinkedSongList} populated with valid songs
      */
     public static DoublyLinkedSongList loadPlayListDLFromCSV(String fileName) {
         DoublyLinkedSongList list = new DoublyLinkedSongList();
 
         try (Scanner sc = new Scanner(new FileReader(fileName))) {
-            // Empty file?
             if (!sc.hasNextLine()) {
-                System.out.println("Warning: file is empty: " + fileName);
+                System.err.println("Warning: file is empty: " + fileName);
                 return list;
             }
 
-            // Read entire file for simple line-number tracking
-            StringBuilder sb = new StringBuilder();
+            sc.nextLine(); // skip header
+            int lineNumber = 1;
+
             while (sc.hasNextLine()) {
-                sb.append(sc.nextLine()).append("\n");
-            }
+                lineNumber++;
+                String line = sc.nextLine().trim();
 
-            String[] lines = sb.toString().split("\n");
-
-            // Expect header on the first line and skip it (i = 1)
-            for (int i = 1; i < lines.length; i++) {
-                int lineNo = i + 1;               // human-friendly 1-based index
-                String line = lines[i].trim();
                 if (line.isEmpty()) {
-                    System.out.println(warn(fileName, lineNo, "empty line (skipped)"));
+                    System.err.println(warn(fileName, lineNumber, "empty line (skipped)"));
                     continue;
                 }
 
-                // Split by comma; expect at least 4 fields
                 String[] parts = line.split(",");
                 if (parts.length < 4) {
-                    System.out.println(warn(fileName, lineNo,
-                        "not enough columns (need 4: Title,Artist,Duration,FilePath)"));
+                    System.err.println(warn(fileName, lineNumber,
+                        "expected 4 columns (Title,Artist,Duration,FilePath), found " + parts.length));
                     continue;
                 }
 
-                String title  = parts[0].trim();
-                String artist = parts[1].trim();
-                String durStr = parts[2].trim();
-                String path   = parts[3].trim();
+                String title   = parts[0].trim();
+                String artist  = parts[1].trim();
+                String durStr  = parts[2].trim();
+                String path    = parts[3].trim();
 
-                // Basic required-field checks
                 if (title.isEmpty() || artist.isEmpty() || path.isEmpty()) {
-                    System.out.println(warn(fileName, lineNo, "empty required field(s)"));
+                    System.err.println(warn(fileName, lineNumber, "empty required field"));
                     continue;
                 }
 
-                // Parse mm:ss -> seconds
-                int durationSecs;
+                int duration;
                 try {
-                    durationSecs = parseDurationToSeconds(durStr);
+                    duration = parseDurationToSeconds(durStr);
                 } catch (NumberFormatException ex) {
-                    System.out.println(warn(fileName, lineNo, "bad duration \"" + durStr + "\""));
+                    System.err.println(warn(fileName, lineNumber,
+                        "unparseable duration \"" + durStr + "\""));
                     continue;
                 }
 
-                // Build and append song
-                Song song = new Song(title, artist, durationSecs, path);
-                list.addLast(song);
+                list.addLast(new Song(title, artist, duration, path));
             }
 
         } catch (IOException e) {
-            System.out.println("Error reading CSV file: " + e.getMessage());
+            System.err.println("Error reading CSV: " + e.getMessage());
         }
 
         return list;
     }
 
-    /** Build a standardized warning message with file and line number. */
-    private static String warn(String file, int lineNo, String msg) {
-        return "Warning (" + file + ":" + lineNo + "): " + msg + ".";
-    }
+    // ----------------------------------------------------------------
+    // Multi-file load
+    // ----------------------------------------------------------------
 
     /**
-     * Parse "mm:ss" into total seconds.
-     * @throws NumberFormatException if the format is not mm:ss or parts aren’t integers.
-     */
-    public static int parseDurationToSeconds(String duration) {
-        String[] time = duration.split(":");
-        int minutes = Integer.parseInt(time[0]);
-        int seconds = Integer.parseInt(time[1]);
-        return minutes * 60 + seconds;
-    }
-
-    /**
-     * Read multiple CSV paths (typed by user) and append all found songs
-     * into the provided linked list. Stops when the user types "Exit".
-     * @return total number of appended songs.
+     * Prompts the user for CSV file paths (one per line) and appends all
+     * songs found into the provided list. Enter {@code "Exit"} to stop.
+     *
+     * @param dlList the destination list
+     * @param input  the Scanner to read paths from
+     * @return the total number of songs appended
      */
     public static int loadMultipleCSVsAndCombine(DoublyLinkedSongList dlList, Scanner input) {
-        System.out.println("Enter CSV paths (one per line). Type 'Exit' to finish:");
-        int addedCount = 0;
+        System.out.println("Enter CSV paths one per line. Type 'Exit' to finish:");
+        int added = 0;
 
         while (true) {
             String path = input.nextLine().trim();
             if (path.equalsIgnoreCase("Exit")) break;
 
-            // Load from one CSV and append to the existing list
-            DoublyLinkedSongList fromCsv = FileUtils.loadPlayListDLFromCSV(path);
-            DoublyLinkedSongNode cur = fromCsv.getHeadNode();
+            DoublyLinkedSongList loaded = loadPlayListDLFromCSV(path);
+            DoublyLinkedSongNode cur = loaded.getHeadNode();
             while (cur != null) {
                 dlList.addLast(cur.getSong());
                 cur = cur.getNext();
-                addedCount++;
+                added++;
             }
         }
-        return addedCount;
+        return added;
     }
 
+    // ----------------------------------------------------------------
+    // Validation
+    // ----------------------------------------------------------------
+
     /**
-     * Checks that every song’s absolute file path points to a real file.
-     * Prints a line for each missing/invalid file and returns how many were missing.
+     * Checks that every song's file path points to a real file on disk.
+     * Prints a line for each missing or invalid entry.
+     *
+     * @param dlList the list to validate
+     * @return the number of songs with missing or invalid files
      */
     public static int validateAudioFiles(DoublyLinkedSongList dlList) {
-        int missing = 0;                      // count how many are missing
+        int missing = 0;
         DoublyLinkedSongNode cur = dlList.getHeadNode();
-
         while (cur != null) {
             Song s = cur.getSong();
-            File f = new File(s.getAbsoluteFilePath());
-
-            // If the file doesn’t exist or isn’t a file, report it
-            if (!f.isFile()) {
-                System.out.println("Missing/invalid: " + s.getTitle() + " — " + s.getAbsoluteFilePath());
-                missing++;                    // ✅ increment only when missing
+            if (!new File(s.getAbsoluteFilePath()).isFile()) {
+                System.err.println("Missing: " + s.getTitle() + " -> " + s.getAbsoluteFilePath());
+                missing++;
             }
-
             cur = cur.getNext();
         }
+        return missing;
+    }
 
-        return missing;                       // ✅ returns number of missing files
+    // ----------------------------------------------------------------
+    // Helpers
+    // ----------------------------------------------------------------
+
+    /**
+     * Parses a duration string into total seconds.
+     *
+     * <p>Accepts two formats:
+     * <ul>
+     *   <li>{@code mm:ss} — e.g. {@code "3:45"} → 225 seconds</li>
+     *   <li>Plain integer — e.g. {@code "225"} → 225 seconds</li>
+     * </ul></p>
+     *
+     * @param duration the duration string
+     * @return total duration in seconds
+     * @throws NumberFormatException if the string cannot be parsed
+     */
+    public static int parseDurationToSeconds(String duration) {
+        duration = duration.trim();
+        if (duration.contains(":")) {
+            String[] parts = duration.split(":");
+            if (parts.length != 2) throw new NumberFormatException("Expected mm:ss, got: " + duration);
+            return Integer.parseInt(parts[0].trim()) * 60 + Integer.parseInt(parts[1].trim());
+        }
+        // Plain seconds fallback
+        return Integer.parseInt(duration);
+    }
+
+    /** Formats a standardized warning with file name and line number. */
+    private static String warn(String file, int line, String msg) {
+        return "Warning (" + file + ":" + line + "): " + msg + ".";
     }
 }
