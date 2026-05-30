@@ -1,309 +1,298 @@
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
 import javax.swing.*;
-import java.awt.*;
-import java.io.File;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.sound.sampled.*;   // AudioInputStream, AudioFormat, AudioSystem
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.File;
 
 /**
- * MusicPlayerGUI
- * Minimal Swing GUI I built for the C-level requirements.
- * It shows a JList of songs, a "Now Playing" label, and basic buttons:
- * Play, Stop, Add Song, Remove.
+ * Swing GUI for the Java Music Player.
  *
- * I’m using a DoublyLinkedSongList (dll) as my backing data structure
- * to match the Week 2 spec. The JList is kept in sync with dll.
+ * <p>Displays the current playlist in a {@link JList}, shows a
+ * &quot;Now Playing&quot; label, and provides transport buttons
+ * (Play, Stop), plus Add Song and Remove Song actions.</p>
+ *
+ * <p>Double-clicking a row immediately starts playback of that song.
+ * The GUI can be pre-loaded with an existing {@link DoublyLinkedSongList}
+ * via {@link #setPlaylistData(DoublyLinkedSongList)}.</p>
+ *
+ * @author Plinio Durango
+ * @version 2.0
  */
 public class MusicPlayerGUI extends JFrame {
 
-    // --- UI state / components ---
-    // Swing model that backs the JList visually (what the user sees)
-    private DefaultListModel<Song> listModel = new DefaultListModel<>();
-    // The list widget (uses listModel above)
-    private JList<Song> playlistList = new JList<>(listModel);
-    // Status label that shows the current track
-    private JLabel nowPlaying = new JLabel("Now Playing: —");
-    // Basic transport
-    private JButton btnPlay = new JButton("Play");
-    private JButton btnStop = new JButton("Stop");
-    // Add/remove songs via chooser and selection
-    private JButton btnAdd = new JButton("Add Song");
-    private JButton btnRemove = new JButton("Remove");
-    // My simple audio backend (plays WAV/AIFF via Java Sound)
-    private AudioPlayer audio = new AudioPlayer();
+    // ----------------------------------------------------------------
+    // UI components
+    // ----------------------------------------------------------------
 
-    // Underlying doubly-linked playlist data structure (not null after setPlaylistData or first Add)
-    private DoublyLinkedSongList dll;
+    private final DefaultListModel<Song> listModel  = new DefaultListModel<>();
+    private final JList<Song>            songList   = new JList<>(listModel);
+    private final JLabel                 nowPlaying = new JLabel("Now Playing: —");
+    private final JButton                btnPlay    = new JButton("Play");
+    private final JButton                btnStop    = new JButton("Stop");
+    private final JButton                btnAdd     = new JButton("Add Song");
+    private final JButton                btnRemove  = new JButton("Remove");
 
-    /** Constructor: sets up the window, wires the UI, and initializes control states. */
-    public MusicPlayerGUI() {
-        super("Music Playlist — List View Only");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 400);              // meets the C-level minimum size spec
-        setLocationRelativeTo(null);    // center the window on screen
+    // ----------------------------------------------------------------
+    // Backend
+    // ----------------------------------------------------------------
 
-        buildListUI();                  // build only the list + top bar for now
-        wireSelectionToNowPlaying();    // when I click a row, update "Now Playing"
-        wireControls();                 // Play/Stop buttons
-        wireRemoveSong();               // Remove button
-        wireAddSong();                  // Add button
-        // wireDoubleClickPlay();       // (optional) I can enable double-click-to-play here
+    private final AudioPlayer        audio = new AudioPlayer();
+    private       DoublyLinkedSongList dll;
 
-        updateControls();               // initialize enabled/disabled button states
-    }
+    // ----------------------------------------------------------------
+    // Constructor
+    // ----------------------------------------------------------------
 
     /**
-     * Builds the JList and the top control area (Now Playing + buttons).
-     * I keep the layout simple: top bar + scrollable list.
+     * Builds and wires the GUI window.
+     * Window size is 800×400 pixels, centred on screen.
      */
-    private void buildListUI() {
-        // Single selection is enough for this step
-        playlistList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    public MusicPlayerGUI() {
+        super("Java Music Player");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(800, 400);
+        setLocationRelativeTo(null);
 
-        // Custom cell renderer so I control how each row looks without changing Song.toString()
-        playlistList.setCellRenderer(new DefaultListCellRenderer() {
+        buildUI();
+        wireSelectionListener();
+        wirePlayStop();
+        wireAddSong();
+        wireRemoveSong();
+        wireDoubleClickPlay();   // double-click a row to play immediately
+        refreshControls();
+    }
+
+    // ----------------------------------------------------------------
+    // UI construction
+    // ----------------------------------------------------------------
+
+    /**
+     * Assembles the layout: a top bar (Now Playing + buttons) and a
+     * scrollable song list in the centre.
+     */
+    private void buildUI() {
+        songList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        songList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(
                     JList<?> list, Object value, int index,
                     boolean isSelected, boolean cellHasFocus) {
-
                 JLabel label = (JLabel) super.getListCellRendererComponent(
                         list, value, index, isSelected, cellHasFocus);
-
                 if (value instanceof Song s) {
-                    // Show title — artist (duration in seconds)
-                    label.setText(s.getTitle() + " — " + s.getArtist() + " (" + s.getDuration() + "s)");
+                    label.setText(String.format("%s — %s (%ds)",
+                            s.getTitle(), s.getArtist(), s.getDuration()));
                 }
                 return label;
             }
         });
 
-        // Top bar has the Now Playing label on the left, buttons on the right
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(nowPlaying, BorderLayout.WEST);
+        // Top bar
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.add(nowPlaying, BorderLayout.WEST);
 
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        controls.add(btnPlay);
-        controls.add(btnStop);
-        controls.add(btnRemove);
-        controls.add(btnAdd);
-        topPanel.add(controls, BorderLayout.EAST);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttons.add(btnPlay);
+        buttons.add(btnStop);
+        buttons.add(btnRemove);
+        buttons.add(btnAdd);
+        topBar.add(buttons, BorderLayout.EAST);
 
-        // The list itself goes inside a scroll pane
-        JScrollPane scroll = new JScrollPane(playlistList);
-
-        // Main layout: top bar + center list
         getContentPane().setLayout(new BorderLayout());
-        getContentPane().add(topPanel, BorderLayout.NORTH);
-        getContentPane().add(scroll, BorderLayout.CENTER);
+        getContentPane().add(topBar,                    BorderLayout.NORTH);
+        getContentPane().add(new JScrollPane(songList), BorderLayout.CENTER);
     }
 
-    /**
-     * When the user changes selection in the list (and the change is final),
-     * update the Now Playing label to reflect the selected song (no auto-play).
-     */
-    private void wireSelectionToNowPlaying() {
-        playlistList.addListSelectionListener(e -> {
+    // ----------------------------------------------------------------
+    // Event wiring
+    // ----------------------------------------------------------------
+
+    /** Updates Now Playing and button states whenever the selection changes. */
+    private void wireSelectionListener() {
+        songList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
-                updateNowPlayingLabel(playlistList.getSelectedValue());
-                updateControls(); // buttons may change state based on selection
+                updateNowPlaying(songList.getSelectedValue());
+                refreshControls();
             }
         });
     }
 
-    /** Small helper that sets the text for the "Now Playing" label. */
-    public void updateNowPlayingLabel(Song s) {
-        if (s == null) {
-            nowPlaying.setText("Now Playing: —");
-        } else {
-            nowPlaying.setText("Now Playing: " + s.getTitle() + " — " + s.getArtist());
-        }
-    }
-
-    /**
-     * Wires the Play and Stop buttons.
-     * Play will use the selected song, or the first one if nothing is selected.
-     * Stop tells the AudioPlayer to stop and resets UI state.
-     */
-    private void wireControls() {
+    /** Wires Play and Stop buttons. */
+    private void wirePlayStop() {
         btnPlay.addActionListener(e -> {
-            Song s = playlistList.getSelectedValue();
+            Song s = songList.getSelectedValue();
             if (s == null && !listModel.isEmpty()) {
-                // If nothing is selected, default to the first list item
-                playlistList.setSelectedIndex(0);
-                s = playlistList.getSelectedValue();
+                songList.setSelectedIndex(0);
+                s = songList.getSelectedValue();
             }
             if (s != null) {
                 audio.playAudio(s);
-                updateNowPlayingLabel(s);
+                updateNowPlaying(s);
             }
-            updateControls();
+            refreshControls();
         });
 
         btnStop.addActionListener(e -> {
             audio.stopAudio();
-            updateControls();
+            refreshControls();
         });
     }
 
-    /**
-     * Central place to enable/disable controls so the GUI gives visual feedback:
-     * - Play enabled only when we have songs
-     * - Stop reflects whether audio is actually playing
-     * - Remove enabled only when there is a selection
-     */
-    private void updateControls() {
-        boolean hasSongs = !listModel.isEmpty();
-        btnPlay.setEnabled(hasSongs);
-        btnStop.setEnabled(audio.isPlaying());
-        btnRemove.setEnabled(playlistList.getSelectedIndex() >= 0);
-    }
-
-    /** Connects the Add button to the add-song flow below. */
-    private void wireAddSong() {
-        btnAdd.addActionListener(e -> onAddSong());
-    }
-
-    /**
-     * Handles adding a song:
-     * - Open a file chooser (wav/aiff)
-     * - Build a Song object
-     * - Ensure my DLL exists, append to it and to the list model
-     * - Select the newly added row (I do NOT auto-play on add)
-     */
-    private void onAddSong() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setFileFilter(new FileNameExtensionFilter("Audio files (wav, aiff)", "wav", "aiff"));
-
-        int res = chooser.showOpenDialog(this);
-        if (res != JFileChooser.APPROVE_OPTION) return;
-
-        File f = chooser.getSelectedFile();
-        if (f == null || !f.isFile()) return;
-
-        // Convert the file into a Song (title = filename without extension, artist = "Unknown")
-        Song s = buildSongFromFile(f);
-
-        // Ensure I have a backing DLL before adding the first song
-        if (dll == null) dll = new DoublyLinkedSongList();
-
-        // 1) Backing data structure
-        dll.addLast(s);
-
-        // 2) GUI list model
-        listModel.addElement(s);
-
-        // 3) Select the new row and refresh the label/state
-        int newIndex = listModel.size() - 1;
-        playlistList.setSelectedIndex(newIndex);
-        updateNowPlayingLabel(s);
-        updateControls();
-    }
-
-    /**
-     * Build a Song from a file: I derive the title from the filename,
-     * use "Unknown" for artist, and try to compute duration with Java Sound.
-     */
-    private Song buildSongFromFile(File f) {
-        String name = f.getName();
-        int dot = name.lastIndexOf('.');
-        String title = (dot > 0 ? name.substring(0, dot) : name);
-        String artist = "Unknown";
-        int durationSec = computeDurationSeconds(f);
-        return new Song(title, artist, durationSec, f.getAbsolutePath());
-    }
-
-    /**
-     * Lightweight duration probe using AudioInputStream:
-     * If this fails (unsupported or error), I return 0 seconds as a fallback.
-     */
-    private int computeDurationSeconds(File file) {
-        try (AudioInputStream ais = AudioSystem.getAudioInputStream(file)) {
-            AudioFormat fmt = ais.getFormat();
-            long frames = ais.getFrameLength();
-            if (fmt.getFrameRate() > 0 && frames > 0) {
-                double seconds = frames / fmt.getFrameRate();
-                return (int) Math.round(seconds);
-            }
-        } catch (Exception ignored) {}
-        return 0;
-    }
-
-    /** Hooks up the Remove button to remove the selected item (and from DLL if present). */
-    private void wireRemoveSong() {
-        btnRemove.addActionListener(e -> onRemoveSelected());
-    }
-
-    /**
-     * Removes the currently selected song (if any).
-     * Keeps the JList and the Now Playing label in a sane state after removal.
-     * Also stops audio if the list becomes empty.
-     */
-    private void onRemoveSelected() {
-        int idx = playlistList.getSelectedIndex();
-        if (idx < 0) return; // nothing selected
-
-        // Keep a reference to what I'm removing (useful for logging/debug)
-        Song removed = listModel.get(idx);
-
-        // Keep the backing structure in sync (if I’m maintaining dll here)
-        if (dll != null) dll.removeAt(idx);
-
-        // Remove from the visual list
-        listModel.remove(idx);
-
-        // If nothing left, clear selection/label and stop audio
-        if (listModel.isEmpty()) {
-            playlistList.clearSelection();
-            updateNowPlayingLabel(null);
-            if (audio.isPlaying()) audio.stopAudio();
-            updateControls();
-            return;
-        }
-
-        // Try to select the same index; if it was the last row, select the new last row
-        int newIndex = Math.min(idx, listModel.size() - 1);
-        playlistList.setSelectedIndex(newIndex);
-
-        // Update the Now Playing label to reflect the new selection
-        Song s = playlistList.getSelectedValue();
-        updateNowPlayingLabel(s);
-
-        updateControls();
-    }
-
-    /**
-     * Optional convenience: double-clicking a list row immediately plays it,
-     * updates selection and Now Playing label, and refreshes controls.
-     */
+    /** Double-clicking a row immediately starts playing that song. */
     private void wireDoubleClickPlay() {
-        playlistList.addMouseListener(new java.awt.event.MouseAdapter() {
+        songList.addMouseListener(new MouseAdapter() {
             @Override
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                if (e.getClickCount() == 2) { // double click
-                    int idx = playlistList.locationToIndex(e.getPoint());
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int idx = songList.locationToIndex(e.getPoint());
                     if (idx >= 0) {
                         Song s = listModel.get(idx);
-                        try {
-                            audio.playAudio(s);
-                            playlistList.setSelectedIndex(idx); // visually highlight the playing row
-                            updateNowPlayingLabel(s);
-                            updateControls();
-                        } catch (Exception ex) {
-                            JOptionPane.showMessageDialog(MusicPlayerGUI.this,
-                                    "Could not play audio:\n" + ex.getMessage(),
-                                    "Playback Error",
-                                    JOptionPane.ERROR_MESSAGE);
-                        }
+                        songList.setSelectedIndex(idx);
+                        audio.playAudio(s);
+                        updateNowPlaying(s);
+                        refreshControls();
                     }
                 }
             }
         });
     }
 
+    /** Wires the Add Song button to a file chooser flow. */
+    private void wireAddSong() {
+        btnAdd.addActionListener(e -> onAddSong());
+    }
+
+    /** Wires the Remove button to remove the currently selected song. */
+    private void wireRemoveSong() {
+        btnRemove.addActionListener(e -> onRemoveSelected());
+    }
+
+    // ----------------------------------------------------------------
+    // Actions
+    // ----------------------------------------------------------------
+
     /**
-     * Loads the JList from a provided DoublyLinkedSongList (dll).
-     * I clear the list model first, then push every Song in order.
-     * If there are songs, I select the first one so the label shows something.
+     * Opens a file chooser, builds a Song from the chosen WAV/AIFF file,
+     * appends it to the backing list and the visual list model, then
+     * selects it. Does NOT auto-play on add.
+     */
+    private void onAddSong() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new FileNameExtensionFilter("Audio files (wav, aiff)", "wav", "aiff"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        File f = chooser.getSelectedFile();
+        if (f == null || !f.isFile()) return;
+
+        Song s = buildSongFromFile(f);
+        if (dll == null) dll = new DoublyLinkedSongList();
+        dll.addLast(s);
+        listModel.addElement(s);
+
+        int newIdx = listModel.size() - 1;
+        songList.setSelectedIndex(newIdx);
+        updateNowPlaying(s);
+        refreshControls();
+    }
+
+    /**
+     * Removes the currently selected song from both the visual list model
+     * and the backing {@link DoublyLinkedSongList}. Stops audio if the
+     * playlist becomes empty.
+     */
+    private void onRemoveSelected() {
+        int idx = songList.getSelectedIndex();
+        if (idx < 0) return;
+
+        if (dll != null) dll.removeAt(idx);
+        listModel.remove(idx);
+
+        if (listModel.isEmpty()) {
+            songList.clearSelection();
+            updateNowPlaying(null);
+            if (audio.isPlaying()) audio.stopAudio();
+            refreshControls();
+            return;
+        }
+
+        int newIdx = Math.min(idx, listModel.size() - 1);
+        songList.setSelectedIndex(newIdx);
+        updateNowPlaying(songList.getSelectedValue());
+        refreshControls();
+    }
+
+    // ----------------------------------------------------------------
+    // Helpers
+    // ----------------------------------------------------------------
+
+    /**
+     * Derives a {@link Song} from a file: title from the filename (without
+     * extension), artist set to {@code "Unknown"}, and duration computed
+     * via {@link AudioSystem} (falls back to 0 on error).
+     *
+     * @param f the audio file
+     * @return a populated {@link Song}
+     */
+    private Song buildSongFromFile(File f) {
+        String name  = f.getName();
+        int    dot   = name.lastIndexOf('.');
+        String title = (dot > 0) ? name.substring(0, dot) : name;
+        return new Song(title, "Unknown", computeDurationSeconds(f), f.getAbsolutePath());
+    }
+
+    /**
+     * Probes the audio file for its duration in seconds.
+     * Returns 0 if the format is unsupported or an error occurs.
+     *
+     * @param file the audio file to probe
+     * @return duration in whole seconds, or 0 on failure
+     */
+    private int computeDurationSeconds(File file) {
+        try (AudioInputStream ais = AudioSystem.getAudioInputStream(file)) {
+            AudioFormat fmt    = ais.getFormat();
+            long        frames = ais.getFrameLength();
+            if (fmt.getFrameRate() > 0 && frames > 0) {
+                return (int) Math.round(frames / fmt.getFrameRate());
+            }
+        } catch (Exception ignored) { }
+        return 0;
+    }
+
+    /**
+     * Updates the "Now Playing" label.
+     *
+     * @param s the song now selected/playing, or {@code null} to reset
+     */
+    public void updateNowPlaying(Song s) {
+        nowPlaying.setText(s == null
+            ? "Now Playing: —"
+            : "Now Playing: " + s.getTitle() + " — " + s.getArtist());
+    }
+
+    /**
+     * Enables or disables buttons based on current state:
+     * <ul>
+     *   <li>Play — enabled when the list is non-empty</li>
+     *   <li>Stop — enabled when audio is currently playing</li>
+     *   <li>Remove — enabled when a row is selected</li>
+     * </ul>
+     */
+    private void refreshControls() {
+        btnPlay.setEnabled(!listModel.isEmpty());
+        btnStop.setEnabled(audio.isPlaying());
+        btnRemove.setEnabled(songList.getSelectedIndex() >= 0);
+    }
+
+    /**
+     * Populates the GUI with songs from an existing {@link DoublyLinkedSongList}.
+     * Clears the current list model, then loads all songs in order.
+     * Selects the first song if the list is non-empty.
+     *
+     * @param dll the playlist to display
      */
     public void setPlaylistData(DoublyLinkedSongList dll) {
         this.dll = dll;
@@ -312,12 +301,12 @@ public class MusicPlayerGUI extends JFrame {
             listModel.addElement(dll.get(i));
         }
         if (!listModel.isEmpty()) {
-            playlistList.setSelectedIndex(0);
-            updateNowPlayingLabel(listModel.get(0));
+            songList.setSelectedIndex(0);
+            updateNowPlaying(listModel.get(0));
         } else {
-            playlistList.clearSelection();
-            updateNowPlayingLabel(null);
+            songList.clearSelection();
+            updateNowPlaying(null);
         }
-        updateControls();
+        refreshControls();
     }
 }
