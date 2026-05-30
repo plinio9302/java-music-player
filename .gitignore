@@ -1,0 +1,36 @@
+# Compiled Java class files
+*.class
+
+# Package / archive files
+*.jar
+*.war
+*.ear
+
+# BlueJ project files
+*.ctxt
+
+# Log files
+*.log
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows system files
+ehthumbs.db
+Thumbs.db
+
+# IDE / editor directories
+.idea/
+*.iml
+.vscode/
+
+# Build output
+out/
+bin/
+
+# Exported playlists
+*.csv.bak
