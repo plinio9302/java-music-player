@@ -1,95 +1,108 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/aiqxq8vk)
+# Java Music Player
 
-Plinio Duarango
-ID: 20800410
+A Java application that combines a **custom doubly-linked list** data structure with Java's built-in `javax.sound.sampled` audio API to deliver both a command-line interface and a Swing GUI for managing and playing music playlists.
 
-How to Run the Program: 
-1. Make sure all the .java files (Song.java, AudioPlayer.java, DoublyLinkedSongNode.java, DoublyLinkedSongList.java, PlayListDL.java, MusicPlayerGUI.java, Main.java, and FileUtils.java) are in the same src/ folder.
+---
 
-2. Run the main program
+## Features
 
-3. The program starts in CLI mode with a menu of options.
-	•	Choose 0 from the menu to launch the GUI (MusicPlayerGUI).
-	•	In the GUI you can add songs (WAV or AIFF), remove songs, play/stop audio, or double-click a song to start playback.
+- **Doubly-Linked Playlist** — Songs are stored in a custom doubly-linked list (`DoublyLinkedSongList`) that supports O(1) add/remove at both ends, indexed access, forward and backward traversal, and bidirectional navigation.
+- **Audio Playback** — Plays WAV and AIFF files via `AudioPlayer`, with support for play, stop, pause, resume, and volume control (LOW / MED / HIGH).
+- **Playlist Navigation** — Jump to any song by index, advance to the next track, go back to the previous one, or play a random song.
+- **Search & Stats** — Find songs by title, filter by artist, and view total song count and playlist duration.
+- **CSV Import / Export** — Load a playlist from a CSV file, merge multiple CSV files into one playlist, validate that audio files exist on disk, and save the current playlist back to CSV.
+- **Swing GUI** — A 800×400 Swing window with a scrollable song list, “Now Playing” label, Play/Stop buttons, and Add/Remove song controls. Launched directly from the CLI menu.
+- **Flexible Duration Input** — Song duration can be entered as `mm:ss` or as plain seconds in both the CLI and CSV files.
 
-You can also run the program directly from your IDE (e.g., IntelliJ or VS Code) by running the Main class.
+---
 
-Self-assessment checklist
+## Data Structure
 
-Specifications for a C (80)
+The core data structure is `DoublyLinkedSongList`, a hand-written doubly-linked list where each node (`DoublyLinkedSongNode`) holds a `Song` and bidirectional `next`/`prev` pointers.
 
+| Operation | Method | Complexity |
+|---|---|---|
+| Add to front / back | `addFirst` / `addLast` | O(1) |
+| Remove from front / back | `removeFirst` / `removeLast` | O(1) |
+| Access by index | `get(index)` | O(n) |
+| Insert / remove at index | `addAt` / `removeAt` | O(n) |
+| Forward / backward print | `displayForward` / `displayBackward` | O(n) |
+| Search by value | `indexOf` / `contains` | O(n) |
 
-DoublyLinkedSongNode Class
+---
 
-	Fields: song (Song), next (DoublyLinkedSongNode), previous (DoublyLinkedSongNode) ✅
+## Project Structure
 
-	Constructor accepting Song parameter ✅
+```
+.
+├── Song.java                  # Song model (title, artist, duration, file path)
+├── DoublyLinkedSongNode.java  # Doubly-linked list node
+├── DoublyLinkedSongList.java  # Custom doubly-linked list for Song objects
+├── PlayListDL.java            # High-level playlist wrapper with navigation & search
+├── AudioPlayer.java           # Audio playback (WAV/AIFF) via javax.sound.sampled
+├── MusicPlayerGUI.java        # Swing GUI (JList, Now Playing, Play/Stop/Add/Remove)
+├── FileUtils.java             # CSV import/export and audio file validation
+├── Main.java                  # Entry point — CLI menu and GUI launcher
+└── Songs.csv                  # Sample playlist dataset
+```
 
-	Appropriate getter/setter methods ✅
+---
 
+## Getting Started
 
-DoublyLinkedSongList Class
+### Prerequisites
 
-	All methods from SongLinkedList (updated for a doubly-linked list) ✅
+- Java 17 or higher (uses pattern matching in `instanceof`)
+- A terminal / command prompt
+- WAV or AIFF audio files for playback
 
-	addFirst(Song song) and addLast(Song song) with bidirectional linking ✅
+### Compile
 
-	removeFirst() and removeLast() with proper link management ✅
+Place all `.java` files in the same directory, then run:
 
-	get(int index) to get the Song object at that index ✅
+```bash
+javac *.java
+```
 
-	displayForward() and displayBackward() methods ✅
+### Run
 
+```bash
+java Main
+```
 
-Enhanced Playlist Class with Bidirectional Navigation
+---
 
-	Migrate from SongLinkedList to DoublyLinkedSongList ✅
+## CSV Format
 
-	nextSong() and previousSong() methods ✅
+Playlists can be loaded from and saved to CSV files in the following format:
 
-	hasNext() and hasPrevious() methods ✅
+```
+Title,Artist,Duration,FilePath
+Clair de Lune,Debussy,5:24,/music/clair_de_lune.wav
+Take Five,Dave Brubeck,5:24,/music/take_five.wav
+```
 
-	Track position in the list of the current song being played ✅
+- **Duration**: `mm:ss` format
+- **FilePath**: absolute path to the audio file
+- Lines with fewer than 4 columns or empty required fields are skipped with a warning
 
-	jumpToSong(int index) with bounds checking and immediate playback ✅
+---
 
-Basic GUI Implementation (800x400 minimum)
+## CLI Menu Overview
 
-	Main window components:
+```
+[0] Launch GUI
+[1] File Operations         — load CSV, merge multiple CSVs, validate files, save
+[2] List Operations         — addFirst, addLast, removeFirst, removeLast, get, insert, remove, clear
+[3] Playlist Operations     — add song, display, total duration, jump to, current song, next
+[4] Audio Controls          — play, stop, pause, resume, volume, play from start, random
+[5] Search & Stats          — find by title, find by artist, playlist statistics
+[6] Save / Export           — write current playlist to CSV
+[7] Quit
+```
 
-		JList displaying current playlist with song information ✅
+---
 
-		“Now Playing” label showing current song details ✅
+## License
 
-		Basic control buttons: Play, Stop ✅
-
-		Add Song button with file chooser to add a song to the playlist ✅
-
-		Remove Song button for removing selected song from the playlist ✅
-
-
-	Event handling:
-
-		Button clicks trigger appropriate playlist/audio actions ✅
-
-		Double-click on the playlist item starts playing that song ✅
-
-
-GUI-Audio Integration
-
-	Highlight currently playing song in JList ✅
-
-	Update “Now Playing” label during playback ✅
-
-	Enable/disable buttons based on playlist state✅
-
-	Visual feedback for all playlist operations✅
-
-
-
-
-
-
-
-
-
+This project is open source and available under the [MIT License](LICENSE).
